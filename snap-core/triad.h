@@ -42,6 +42,7 @@ template<class PGraph> int GetLen2Paths(const PGraph& Graph, const int& NId1, co
 /// Returns the 2 directed paths between a pair of nodes NId1, NId2 (NId1 --> U --> NId2). ##TSnap::GetLen2Paths
 template<class PGraph> int GetLen2Paths(const PGraph& Graph, const int& NId1, const int& NId2, TIntV& NbrV);
 
+int64 CountTriangles1(const TVec<TNGraph::TNodeI,int>& NV, const TIntV& IndV, const TIntV& MapV);
 void GetMergeSortedV(TIntV& NeighbourV, TNGraph::TNodeI NI);
 int GetCommon(TIntV& A, TIntV& B);
 
@@ -207,9 +208,19 @@ void GetTriads(const PGraph& Graph, TIntTrV& NIdCOTriadV, int SampleNodes) {
 
 
 template<class PGraph> 
-int64 CountTriangles(const PGraph& Graph) {
-  THash<TInt, TInt> H;
+int64 CountTriangles(const PGraph& Graph, const THashMP <TInt, TInt>& H, const TIntV& MapV) {
+  struct timeval start, end;
+  float delta;
+  TTmProfiler Profiler;
+  int TimerId = Profiler.AddTimer("Profiler");
+
+#if 0
+  THashMP <TInt, TInt> H(50000000);
   TIntV MapV;
+
+  Profiler.ResetTimer(TimerId);
+  Profiler.StartTimer(TimerId);
+  gettimeofday(&start, NULL);
 
   int ind = 0;
   for (TNGraph::TNodeI NI = Graph->BegNI(); NI < Graph->EndNI(); NI++)   {
@@ -218,28 +229,167 @@ int64 CountTriangles(const PGraph& Graph) {
     ind += 1;
   }
 
-  TVec<TIntV> HigherDegNbrV(ind);
+  gettimeofday(&end, NULL);
+  Profiler.StopTimer(TimerId);
+  delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
+            end.tv_usec - start.tv_usec) / 1.e6;
+  printf("__nodemap__\ttime %7.3f\tcpu %8.3f\n", delta, Profiler.GetTimerSec(TimerId));
+#endif
 
+  int ind = MapV.Len();
+
+  Profiler.ResetTimer(TimerId);
+  Profiler.StartTimer(TimerId);
+  gettimeofday(&start, NULL);
+
+  TVec<TIntV> HigherDegNbrV(ind);
+#if 1
+// Rok #11, #12
+//# pragma omp parallel for schedule(dynamic)
+  for (int i = 0; i < ind; i++) {
+    HigherDegNbrV[i] = TVec<TInt>();
+    HigherDegNbrV[i].Reserve(Graph->GetNI(MapV[i]).GetDeg());
+    HigherDegNbrV[i].Reduce(0);
+  }
+#endif
+
+  gettimeofday(&end, NULL);
+  Profiler.StopTimer(TimerId);
+  delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
+            end.tv_usec - start.tv_usec) / 1.e6;
+  printf("__valloc__\ttime %7.3f\tcpu %8.3f\n", delta, Profiler.GetTimerSec(TimerId));
+
+  Profiler.ResetTimer(TimerId);
+  Profiler.StartTimer(TimerId);
+  gettimeofday(&start, NULL);
+
+#if 0
+// Rok #8
+// #pragma omp parallel for schedule(static,10000)
+// Arijit
 #pragma omp parallel for schedule(dynamic)
   for (TInt i = 0; i < ind; i++) {
     TNGraph::TNodeI NI = Graph->GetNI(MapV[i]);
     TIntV NbrV;
 
+    // 6.5s
     GetMergeSortedV(NbrV, NI);
 
-    TIntV V;
+#if 1
+    TIntV V(NbrV.Len());
+    V.Reduce(0);
+    //TIntV V;
+    for (TInt j = 0; j < NbrV.Len(); j++) {
+      TInt Vert = NbrV[j];
+      TInt Deg = Graph->GetNI(Vert).GetDeg();
+#if 1
+// Arijit
+      if (Deg > NI.GetDeg() || 
+         (Deg == NI.GetDeg() && Vert > NI.GetId())) {
+        V.Add(Vert);
+      }
+#endif
+#if 0
+// Rok #9
+      if (Deg < NI.GetDeg() || 
+         (Deg == NI.GetDeg() && Vert > NI.GetId())) {
+        V.Add(Vert);
+      }
+#endif
+#if 0
+// Rok #10
+      if (Deg < NI.GetDeg() || 
+         (Deg == NI.GetDeg() && Vert > NI.GetId())) {
+        NbrV[k] = Vert;
+      }
+#endif
+#if 0
+// Rok #7
+      if (Deg < NI.GetDeg() || 
+         (Deg == NI.GetDeg() && Vert <= NI.GetId())) {
+        continue;
+      }
+      V.Add(Vert);
+#endif
+    }
+
+    HigherDegNbrV[i] = V;
+#endif
+
+#if 0
+// Rok #10
+    int k = 0;
     for (TInt j = 0; j < NbrV.Len(); j++) {
       TInt Vert = NbrV[j];
       TInt Deg = Graph->GetNI(Vert).GetDeg();
       if (Deg > NI.GetDeg() || 
          (Deg == NI.GetDeg() && Vert > NI.GetId())) {
-        V.Add(Vert);
+        NbrV[k] = Vert;
+        k++;
       }
     }
+    NbrV.Reduce(k);
 
-    HigherDegNbrV[i] = V;
-
+    HigherDegNbrV[i] = NbrV;
+#endif
   }
+#endif
+
+#if 1
+// Rok #11
+#pragma omp parallel for schedule(dynamic)
+  for (TInt i = 0; i < ind; i++) {
+    TNGraph::TNodeI NI = Graph->GetNI(MapV[i]);
+    //HigherDegNbrV[i] = TVec<TInt>();
+    //HigherDegNbrV[i].Reserve(NI.GetDeg());
+    //HigherDegNbrV[i].Reduce(0);
+
+    GetMergeSortedV(HigherDegNbrV[i], NI);
+
+    int k = 0;
+    for (TInt j = 0; j < HigherDegNbrV[i].Len(); j++) {
+      TInt Vert = HigherDegNbrV[i][j];
+      TInt Deg = Graph->GetNI(Vert).GetDeg();
+      if (Deg > NI.GetDeg() || 
+         (Deg == NI.GetDeg() && Vert > NI.GetId())) {
+        HigherDegNbrV[i][k] = Vert;
+        k++;
+      }
+    }
+    HigherDegNbrV[i].Reduce(k);
+  }
+#endif
+
+#if 0
+// Rok #12
+#pragma omp parallel for schedule(dynamic)
+  for (TInt i = 0; i < ind; i++) {
+    TNGraph::TNodeI NI = Graph->GetNI(MapV[i]);
+    TIntV NbrV(NI.GetDeg());
+    NbrV.Reduce(0);
+
+    GetMergeSortedV(NbrV, NI);
+
+    for (TInt j = 0; j < NbrV.Len(); j++) {
+      TInt Vert = NbrV[j];
+      TInt Deg = Graph->GetNI(Vert).GetDeg();
+      if (Deg > NI.GetDeg() || 
+         (Deg == NI.GetDeg() && Vert > NI.GetId())) {
+        HigherDegNbrV[i].Add(Vert);
+      }
+    }
+  }
+#endif
+
+  gettimeofday(&end, NULL);
+  Profiler.StopTimer(TimerId);
+  delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
+            end.tv_usec - start.tv_usec) / 1.e6;
+  printf("__sort__\ttime %7.3f\tcpu %8.3f\n", delta, Profiler.GetTimerSec(TimerId));
+
+  Profiler.ResetTimer(TimerId);
+  Profiler.StartTimer(TimerId);
+  gettimeofday(&start, NULL);
 
   int64 cnt = 0;
 #pragma omp parallel for schedule(dynamic) reduction(+:cnt)
@@ -251,6 +401,12 @@ int64 CountTriangles(const PGraph& Graph) {
       cnt += num;
     }
   }
+
+  gettimeofday(&end, NULL);
+  Profiler.StopTimer(TimerId);
+  delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
+            end.tv_usec - start.tv_usec) / 1.e6;
+  printf("__count__\ttime %7.3f\tcpu %8.3f\n", delta, Profiler.GetTimerSec(TimerId));
 
   return cnt;
 }

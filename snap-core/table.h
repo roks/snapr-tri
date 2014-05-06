@@ -60,11 +60,11 @@ public:
   TStr StrVal;
   TAttrType AttrType;
 
-  TPrimitive() { AttrType = atInt; IntVal = -1; }
-  TPrimitive(const TInt& Val) { AttrType = atInt; IntVal = Val; }
-  TPrimitive(const TFlt& Val) { AttrType = atFlt; FltVal = Val; }
-  TPrimitive(const TStr& Val) { AttrType = atStr; StrVal = Val.CStr(); }
-  TPrimitive(const TPrimitive& Prim) { 
+  TPrimitive() : IntVal(0), FltVal(0), StrVal("1") { AttrType = atInt; IntVal = -1; }
+  TPrimitive(const TInt& Val) : IntVal(0), FltVal(0), StrVal("1") { AttrType = atInt; IntVal = Val; }
+  TPrimitive(const TFlt& Val) : IntVal(0), FltVal(0), StrVal("1") { AttrType = atFlt; FltVal = Val; }
+  TPrimitive(const TStr& Val) : IntVal(0), FltVal(0), StrVal("1") { AttrType = atStr; StrVal = Val.CStr(); }
+  TPrimitive(const TPrimitive& Prim) : IntVal(0), FltVal(0), StrVal("1")  { 
     AttrType = Prim.AttrType; 
     switch(AttrType) {
       case atInt: IntVal = Prim.IntVal; break;
@@ -135,7 +135,7 @@ public:
   /// Return value of string attribute specified by string column index for current row
   TStr GetStrAttr(TInt ColIdx) const;
   /// Return integer mapping of a string attribute value specified by string column index for current row
-  TInt GetStrMap(TInt ColIdx) const;
+  TInt GetStrMap(const TInt ColIdx) const;
   /// Return value of integer attribute specified by attribute name for current row
   TInt GetIntAttr(const TStr& Col) const;
   /// Return value of float attribute specified by attribute name for current row
@@ -626,6 +626,7 @@ public:
   TTable(); 
   TTable(TTableContext& Context);
   TTable(const TStr& TableName, const Schema& S, TTableContext& Context);
+  TTable(const Schema& S, TTableContext& Context);
   TTable(TSIn& SIn, TTableContext& Context);
 
   /// Constructor to build table out of a hash table of int->int
@@ -655,6 +656,9 @@ public:
   static PTable New(TTableContext& Context) { return new TTable(Context); }
   static PTable New(const TStr& TableName, const Schema& S, TTableContext& Context) { 
     return new TTable(TableName, S, Context); 
+  }
+  static PTable New(const Schema& S, TTableContext& Context) { 
+    return new TTable(S, Context); 
   }
   /// Return pointer to a table constructed from given int->int hash
   static PTable New(const TStr& TableName, const THash<TInt,TInt>& H, const TStr& Col1, 

@@ -60,7 +60,7 @@ TInt TRowIterator::GetStrMap(const TStr& Col) const {
   return Table->StrColMaps[ColIdx][CurrRowIdx];
 }
 
-TInt TRowIterator::GetStrMap(TInt ColIdx) const {
+TInt TRowIterator::GetStrMap(const TInt ColIdx) const {
   return Table->StrColMaps[ColIdx][CurrRowIdx];
 }
 
@@ -169,14 +169,43 @@ TBool TRowIteratorWithRemove::CompareAtomicConst(TInt ColIdx, const TPrimitive& 
 
 // better not use default constructor as it leads to a memory leak
 // - OR - implement a destructor
-TTable::TTable(): Context(*(new TTableContext)), NumRows(0), NumValidRows(0),
+TTable::TTable(): Name("1"), Context(*(new TTableContext)), NumRows(0), NumValidRows(0),
   FirstValidRow(0), LastValidRow(-1) {}
 
-TTable::TTable(TTableContext& Context): Context(Context), NumRows(0), 
+TTable::TTable(TTableContext& Context): Name("1"), Context(Context), NumRows(0), 
   NumValidRows(0), FirstValidRow(0), LastValidRow(-1) {} 
 
 TTable::TTable(const TStr& TableName, const Schema& TableSchema, 
   TTableContext& Context): Name(TableName), Context(Context), S(TableSchema),
+  NumRows(0), NumValidRows(0), FirstValidRow(0), LastValidRow(-1), IsNextDirty(0) {
+  TInt IntColCnt = 0;
+  TInt FltColCnt = 0;
+  TInt StrColCnt = 0;
+  for (TInt i = 0; i < S.Len(); i++) {
+    TStr ColName = GetSchemaColName(i);
+    TAttrType ColType = GetSchemaColType(i);
+    switch (ColType) {
+      case atInt:
+        ColTypeMap.AddDat(ColName, TPair<TAttrType,TInt>(atInt, IntColCnt));
+        IntColCnt++;
+        break;
+      case atFlt:
+        ColTypeMap.AddDat(ColName, TPair<TAttrType,TInt>(atFlt, FltColCnt));
+        FltColCnt++;
+        break;
+      case atStr:
+        ColTypeMap.AddDat(ColName, TPair<TAttrType,TInt>(atStr, StrColCnt));
+        StrColCnt++;
+        break;
+    }
+  }
+  IntCols = TVec<TIntV>(IntColCnt);
+  FltCols = TVec<TFltV>(FltColCnt);
+  StrColMaps = TVec<TIntV>(StrColCnt);
+}
+
+TTable::TTable(const Schema& TableSchema, 
+  TTableContext& Context): Name("1"), Context(Context), S(TableSchema),
   NumRows(0), NumValidRows(0), FirstValidRow(0), LastValidRow(-1), IsNextDirty(0) {
   TInt IntColCnt = 0;
   TInt FltColCnt = 0;
@@ -2006,6 +2035,7 @@ void TTable::SelectAtomicConst(const TStr& Col, const TPrimitive& Val, TPredComp
       TIntPrV Bounds(Partitions.Len());
     
       #pragma omp parallel for schedule(dynamic, CHUNKS_PER_THREAD) reduction(+:RemoveCount) shared(Val)
+      //#pragma omp parallel for schedule(dynamic, CHUNKS_PER_THREAD) reduction(+:RemoveCount)
       for (int i = 0; i < Partitions.Len(); i++){
         TPrimitive ThreadLocalVal(Val);
         TRowIterator RowI(Partitions[i].GetVal1(), this);
@@ -2016,6 +2046,7 @@ void TTable::SelectAtomicConst(const TStr& Col, const TPrimitive& Val, TPredComp
         while (RowI < EndI) {
           TInt CurrRowIdx = RowI.GetRowIdx();
           TBool Result = RowI.CompareAtomicConst(ColIdx, ThreadLocalVal, Cmp);
+          //TBool Result = RowI.CompareAtomicConst(ColIdx, Val, Cmp);
           RowI++;
           if(!Result) {
             Next[CurrRowIdx] = TTable::Invalid;
