@@ -54,6 +54,9 @@ BenchmarkAshton: BenchmarkAshton.cpp $(CSNAP)/Snap.o
 testTriangleCount: testTriangleCount.cpp  $(CSNAP)/Snap.o
 	$(CC) $(CXXFLAGS) -o $@ $@.cpp $(CSNAP)/Snap.o -I$(CSNAP) -I$(CGLIB) $(LDFLAGS) $(LIBS)
 
+triangles: triangles.cpp  $(CSNAP)/Snap.o
+	$(CC) $(CXXFLAGS) -o $@ $@.cpp $(CSNAP)/Snap.o -I$(CSNAP) -I$(CGLIB) $(LDFLAGS) $(LIBS)
+
 PARALLEL = ParallelJoinTest ParallelSelectTest
 
 par: $(PARALLEL)

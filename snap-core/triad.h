@@ -43,6 +43,7 @@ template<class PGraph> int GetLen2Paths(const PGraph& Graph, const int& NId1, co
 template<class PGraph> int GetLen2Paths(const PGraph& Graph, const int& NId1, const int& NId2, TIntV& NbrV);
 
 int64 CountTriangles1(const TVec<TNGraph::TNodeI,int>& NV, const TIntV& IndV, const TIntV& MapV);
+int64 CountTriangles2(const PNGraph& Graph);
 void GetMergeSortedV(TIntV& NeighbourV, TNGraph::TNodeI NI);
 int GetCommon(TIntV& A, TIntV& B);
 
